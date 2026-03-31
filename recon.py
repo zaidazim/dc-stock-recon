@@ -24,12 +24,12 @@ import pandas as pd
 # Maps each logical role to the set of normalised column names that uniquely
 # identify it.  ALL listed columns must be present for a match.
 FINGERPRINTS: dict[str, set[str]] = {
-    "wh_vm_os":          {"wh_cs_actual", "vm_cs_actual"},
-    "pr":                {"pr_qty"},                        # after alias applied
-    "calc_direct_refill":{"calc_direct_refill"},
-    "kit_prepared":      {"kit_prepared_qty", "sku_id"},    # item_quantity → kit_prepared_qty; sku_group_id → sku_id
-    "ops":               {"extra", "remove", "expire"},     # expiry → expire
-    "sales":             {"sales"},
+    "wh_vm_os":          {"wh_cs_actual", "vm_cs_actual", "warehouse_id", "sku_id"},
+    "pr":                {"pr_qty", "warehouse_id", "sku_id"},           # after alias applied
+    "calc_direct_refill":{"calc_direct_refill", "warehouse_id", "sku_id"},
+    "kit_prepared":      {"kit_prepared_qty", "sku_id", "warehouse_id"}, # item_quantity → kit_prepared_qty; sku_group_id → sku_id
+    "ops":               {"extra", "remove", "expire", "warehouse_id", "sku_id"},  # expiry → expire
+    "sales":             {"sales", "warehouse_id", "sku_id"},
     # variant_info is optional / reference only — not in fingerprint loop
 }
 
@@ -68,7 +68,7 @@ EXCLUDE_PATTERNS = ("final-stock-recon", "recon_run.log", "variant-info")
 def normalise_cols(df: pd.DataFrame) -> pd.DataFrame:
     """
     Normalise all column names in *df* in-place (returns same df):
-      1. strip + lower + spaces→underscores
+      1. strip + lower + spaces→underscores  (single-pass normalisation)
       2. apply COLUMN_ALIASES
     """
     renamed = {}
@@ -582,8 +582,9 @@ def main() -> None:
 
         # ------------------------------------------------------------------
         # 8. Guardrail #5 — validate column totals
-        #    Note: wh_vm_os columns are renamed to wh_os/vm_os at merge time,
-        #    so we pass raw_dfs which still has the original column names.
+        #    Note: wh_vm_os columns are renamed to wh_os/vm_os inside merge_all
+        #    on an internal copy, so agg_dfs still has the original names
+        #    (wh_cs_actual / vm_cs_actual) for comparison.
         # ------------------------------------------------------------------
         validate_totals(output_df, agg_dfs)
 
@@ -616,16 +617,15 @@ def main() -> None:
         if warn_count:
             print(f"  {warn_count} warning(s) — see above for details.")
 
-    except SystemExit as exc:
-        # Hard-stop errors: log FAILED then re-raise
-        append_log(
-            folder,
-            run_date,
-            files=[],
-            row_count=0,
-            warn_count=0,
-            status="FAILED",
-        )
+    except SystemExit:
+        # Hard-stop errors (guardrails): log FAILED then re-raise
+        append_log(folder, run_date, files=[], row_count=0, warn_count=0, status="FAILED")
+        raise
+
+    except Exception as exc:
+        # Unexpected runtime errors: log FAILED then re-raise so the traceback is visible
+        logging.error("Unexpected error: %s", exc)
+        append_log(folder, run_date, files=[], row_count=0, warn_count=0, status="FAILED")
         raise
 
     finally:
