@@ -57,8 +57,12 @@ OUTPUT_COLUMNS = [
     "sales", "wh_cs_calc", "vm_cs_calc",
 ]
 
-# Files / patterns that must never be treated as inputs
+# Files / patterns that must never be treated as inputs.
+# The ISO-timestamp suffix pattern (e.g. "...2026-03-31T13_08_04.649628Z.csv")
+# identifies timestamped backup/export copies — exclude them so only the clean
+# working files in the root folder are detected.
 EXCLUDE_PATTERNS = ("final-stock-recon", "recon_run.log", "variant-info")
+EXCLUDE_SUFFIXES = ("z.csv",)   # ISO-timestamp exports end in ...Z.csv
 
 
 # ---------------------------------------------------------------------------
@@ -90,9 +94,9 @@ def _should_exclude(path: Path) -> bool:
     for pat in EXCLUDE_PATTERNS:
         if pat in name_lower:
             return True
-    # Also exclude the output files explicitly
-    if "final-stock-recon-output" in name_lower:
-        return True
+    for suffix in EXCLUDE_SUFFIXES:
+        if name_lower.endswith(suffix):
+            return True
     return False
 
 
