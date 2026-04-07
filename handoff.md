@@ -88,6 +88,30 @@ Do NOT patch rows manually — the root cause must be fixed at source.
 
 ---
 
+## Next session — run FY 2025-26 recon (Apr 2025 – Mar 2026)
+
+**Status as of 2026-04-07:** pipeline is built and ready. The following is already done:
+- PR processed: `pr_processed_2026-04-07.csv` is in root (covers Apr 2025 – Mar 2026, both half-year Zoho exports combined)
+- Opening stock: `wh-vm-os.csv` is in root (Apr 2025 opening, reused from prior run)
+
+**What's needed to run:**
+1. Create `.env` from `.env.example` and fill in Redshift credentials
+2. Run: `.venv/bin/python src/fetch_data.py --start 2025-04-01 --end 2026-03-01`
+   - Optionally run `.venv/bin/python src/validate_fetch.py` after to spot-check fetched totals
+3. Run: `.venv/bin/python src/recon.py .`
+4. Run: `.venv/bin/python src/mapper.py <recon_output_file> --variant-info variant-info.csv`
+
+Or just use the slash command (Claude Code only): `/recon 2025-04-01 2026-03-01`
+
+**Watch out for:**
+- Null `warehouse_id` rows — `fetch_data.py` will hard stop and print the affected VM IDs. Fix in DB, re-run.
+- `recon.py` must be called with `.` as folder arg so it scans root, not `src/`
+- Python: always use `.venv/bin/python`, not system python
+
+**No valid reference output exists yet for the full FY.** Do not compare against `archive/2026-03-31/` — that was Apr 2025–Feb 2026 only.
+
+---
+
 ## Validation baseline
 
 The script's first successful run produced `final-stock-recon-output_2026-03-31.csv` (11,711 rows).
