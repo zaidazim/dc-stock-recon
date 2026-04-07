@@ -13,16 +13,28 @@ merges, computes closing stock, validates totals, and writes a dated output CSV.
 
 ```
 dc-stock-recon/
-├── recon.py                          ← the automation script (run this)
-├── final-stock-recon.csv             ← reference output (manually built in Google Sheets)
-├── final-stock-recon-output_*.csv    ← script outputs (excluded from detection)
-├── variant-info.csv                  ← SKU reference table (not used in recon, excluded)
-├── recon_run.log                     ← one-line summary appended after each run
-├── archive/<YYYY-MM-DD>/             ← input files auto-moved here after a successful run
-└── old/                              ← backup/timestamped exports (excluded from detection)
+├── src/
+│   ├── recon.py              ← reconciliation engine
+│   ├── mapper.py             ← variant aggregation
+│   ├── fetch_data.py         ← Redshift data fetcher
+│   ├── process_pr.py         ← Zoho PR cleaner
+│   ├── validate_fetch.py     ← post-fetch QA checks
+│   └── compare.py            ← manual validation utility
+├── .claude/commands/
+│   ├── recon.md              ← /recon slash command
+│   └── process-pr.md         ← /process-pr slash command
+├── archive/<YYYY-MM-DD>/     ← input files auto-moved here after a successful run
+├── tmp/                      ← raw files staged for deletion (gitignored)
+├── variant-info.csv          ← SKU → variant mapping reference
+├── warehouse_lookup.csv      ← CF.WAREHOUSE → warehouse_id lookup (PR processing)
+├── wh-vm-os.csv              ← opening stock (fixed per financial year)
+├── recon_run.log             ← one-line summary appended after each run
+├── .env                      ← Redshift credentials (gitignored)
+├── .env.example              ← credential template
+└── .venv/                    ← Python 3.13 virtualenv (gitignored)
 ```
 
-**To run the script:** drop input CSVs into the root folder, then `python recon.py`
+**To run:** see slash commands `/process-pr` and `/recon` — or run scripts directly via `.venv/bin/python src/<script>.py`
 
 ---
 
@@ -68,12 +80,11 @@ Where `wh_os` = `wh_cs_actual` and `vm_os` = `vm_cs_actual` from the `wh_vm_os` 
 
 ## Open issue — null warehouse_ids
 
-Three source files (`sales`, `ops`, `calc_direct_refill`) have rows where `warehouse_id` is null
-for VMs 3034–3043. The user believes this is a data pipeline issue and is investigating.
-Until fixed at source, these rows will trigger Guardrail #3 and block the run.
+`fetch_data.py` performs a null `warehouse_id` check after each Redshift query. If any rows
+return null (e.g. VMs with no `warehouse_id` set in `dc_prod_db_vending_machines`), the script
+hard stops and prints the affected VM IDs. Fix the mapping in the DB before re-running.
 
-Workaround (temporary, do not automate): patch those rows to `warehouse_id = 9`
-based on cross-referencing the timestamped backup exports in `old/`.
+Do NOT patch rows manually — the root cause must be fixed at source.
 
 ---
 

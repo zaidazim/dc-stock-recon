@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 recon_run.log
+tmp/
+.venv/
+.env

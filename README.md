@@ -1,40 +1,62 @@
 # DC Stock Reconciliation Automation
 
 ## Purpose
-This repository automates the Monthly/Quarterly Stock Reconciliation process. It collapses multiple operational CSV data exports into a single pipeline, generating unified stock totals across warehouses and SKUs, and mapping variants sharing identical characteristics into grouped keys.
+Automates the annual financial year stock reconciliation across warehouses and SKUs. Fetches operational data from Redshift, processes Zoho purchase records, and produces a unified closing stock report per warehouse × SKU, then a second pass mapping SKU variants by price group.
 
 ## Environment
-* **Python**: 3.13 via `.venv` (created via `python -m venv .venv`).
-* **Dependencies**: `pandas` (`pip install pandas`). Use `python` relative to the `.venv`.
+- **Python**: 3.13 via `.venv` (`python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`)
+- **Credentials**: copy `.env.example` → `.env` and fill in Redshift credentials
 
-## Core Files & Architecture
+## Workflow
 
-### 1. `recon.py` (The Engine)
-* **Input**: Scans the current directory for CSV files mapping to predefined "role fingerprints" (e.g., `wh_vm_os`, `pr`, `sales`, etc.).
-* **Logic**: 
-  * Normalizes column names (`space` -> `_`, `lowercase`, `aliases`).
-  * Strictly validates column constraints and runs Guardrails (aborts on missing columns, null `warehouse_id`s, or duplicate keys).
-  * Merges all files together matching on `warehouse_id` + `sku_id`. 
-  * Calculates derived formula metrics: `helper`, `total_fresh`, `wh_cs_calc`, `vm_cs_calc`.
-* **Output**: `final-stock-recon-output_YYYY-MM-DD.csv` and stores processed input files in `archive/<DATE>/`.
+### Step 1 — Process Purchase Receives (Zoho, manual)
+Drop raw `*PurchaseReceive*.csv` exports from Zoho into root, then:
+```
+/process-pr
+```
+Produces `pr_processed_YYYY-MM-DD.csv` in root.
 
-### 2. `mapper.py` (The Aggregator)
-* **Input**: Expects `final-stock-recon-output_*.csv` (as `sys.argv[1]`) and `variant-info.csv`.
-* **Logic**: 
-  * Parses `variant-info.csv`, stripping illegal commas from `brand_id` and `mvid`.
-  * Computes `mapper_variant_id` representing the `min(mvid)` within groups of identical `brand_id` and `offer_price`.
-  * Any `sku_id`s missing from `variant-info.csv` (garbage data) are deliberately mapped to `0` (Under the Law of Conservation, this prevents numeric sum discrepancies from dropping records).
-  * Groups the recon output by `warehouse_id` and `mapper_variant_id` and perfectly `sum()`s the numeric facts.
-* **Output 1 (Aggregated Data)**: `final-stock-recon-mapped-output_YYYY-MM-DD.csv`. Drops `sku_id` and `variant_id` to strictly display the `mapper_variant_id` and its aggregate values.
-* **Output 2 (Lookup Dictionary)**: `variant-mapping-reference_YYYY-MM-DD.csv`. An individual itemized cross-reference defining exactly which `sku_id` mapped to which `mapper_variant_id`.
+### Step 2 — Run Reconciliation (Redshift, automated)
+```
+/recon 2025-04-01 2026-03-01
+```
+Dates are IST. Start is inclusive, end is exclusive — match the financial year boundary.
 
-### 3. `handoff.md` (Context Documentation)
-* Detailed breakdown of strict accounting formulas, legacy logic definitions, column mappings, and known Data Pipeline problems (e.g. VMs 3034-3043 outputting null `warehouse_id` strings).
+This single command:
+1. Fetches kits prepared, calc direct refill, ops, and sales from Redshift
+2. Runs the reconciliation engine
+3. Runs the variant mapper
 
-### 4. `compare.py`
-* Utility for testing and validating the script vs a manual Google Sheets file.
+Outputs: `final-stock-recon-output_YYYY-MM-DD.csv` and `final-stock-recon-mapped-output_YYYY-MM-DD.csv`
 
-## Expected Workflow Sequence
-1. Drop raw CSV data streams and `variant-info.csv` into repo.
-2. `python recon.py`
-3. `python mapper.py final-stock-recon-output_YYYY-MM-DD.csv`
+---
+
+## Scripts (`src/`)
+
+| Script | Purpose |
+|--------|---------|
+| `fetch_data.py` | Fetches 4 datasets from Redshift for a given IST date range |
+| `recon.py` | Detects input CSVs by column fingerprint, merges, computes closing stock |
+| `mapper.py` | Aggregates recon output by mapper variant (min mvid per brand+price group) |
+| `process_pr.py` | Cleans and aggregates Zoho PR exports |
+| `validate_fetch.py` | QA checks on fetched CSVs — run before recon if you want to inspect totals |
+| `compare.py` | Manual utility for comparing two recon outputs |
+
+## Core Formulas
+
+```
+total_fresh = kit_prepared_qty + calc_direct_refill
+wh_cs_calc  = (wh_os + pr_qty) - (total_fresh - extra - remove)
+vm_cs_calc  = vm_os - (sales + expire) + (total_fresh - extra - remove)
+```
+
+## Permanent Files
+
+| File | Notes |
+|------|-------|
+| `wh-vm-os.csv` | Opening stock — fixed for the financial year, provided once in April |
+| `variant-info.csv` | SKU → variant mapping reference for mapper.py |
+| `warehouse_lookup.csv` | CF.WAREHOUSE → warehouse_id lookup for PR processing |
+
+## Archive
+After each successful `recon.py` run, all input CSVs are automatically moved to `archive/YYYY-MM-DD/`. Raw PR files should be moved to `tmp/` (gitignored) and deleted after processing.
