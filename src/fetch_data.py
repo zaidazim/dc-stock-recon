@@ -122,6 +122,17 @@ OUTPUT_FILES = {
     "sales":             "sales.csv",
 }
 
+VARIANT_INFO_SQL = """
+SELECT mvar.id AS sku_id, b.id AS brand_id, b.name AS brand_name,
+       var.id AS variant_id, var.name AS variant_name,
+       mvar.manufacturer_id, p.id AS product_id, p.name AS product_name,
+       mvar.offer_price, mvar.mrp, mvar.created_at AS sku_created_at
+FROM brands b
+JOIN products p ON p.brand_id = b.id
+JOIN variants var ON var.product_id = p.id
+JOIN manufacturer_variants mvar ON mvar.variant_id = var.id
+"""
+
 
 # ---------------------------------------------------------------------------
 # DB connection
@@ -218,6 +229,16 @@ def main() -> None:
             out_path = ROOT / OUTPUT_FILES[name]
             df.to_csv(out_path, index=False)
             print(f"  Saved → {OUTPUT_FILES[name]}")
+
+        # Fetch variant info (no time filter)
+        print("\n[variant_info]  (full table, no date filter)")
+        with conn.cursor() as cur:
+            cur.execute(VARIANT_INFO_SQL)
+            cols = [desc[0] for desc in cur.description]
+            df_vinfo = pd.DataFrame(cur.fetchall(), columns=cols)
+        print(f"  Rows fetched: {len(df_vinfo):,}")
+        df_vinfo.to_csv(ROOT / "variant-info.csv", index=False)
+        print("  Saved → variant-info.csv")
 
         print("\nAll datasets fetched and saved.")
 

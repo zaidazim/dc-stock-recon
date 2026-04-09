@@ -21,19 +21,19 @@ def main():
     print(f"Loading variant info from {vinfo_path.name}...")
     vinfo = pd.read_csv(vinfo_path, dtype=str)
     
-    # Clean and parse required columns
-    vinfo['mvid_clean'] = pd.to_numeric(vinfo['mvid'].astype(str).str.replace(',', '', regex=False), errors='coerce')
-    vinfo['offer_price_clean'] = pd.to_numeric(vinfo['offer_price'].astype(str).str.replace(',', '', regex=False), errors='coerce')
-    vinfo['brand_id_clean'] = vinfo['brand_id'].fillna('').str.replace(',', '', regex=False).str.strip()
+    # Clean and parse required columns (DB returns clean numerics — no comma-stripping needed)
+    vinfo['sku_id_clean'] = pd.to_numeric(vinfo['sku_id'], errors='coerce')
+    vinfo['offer_price_clean'] = pd.to_numeric(vinfo['offer_price'], errors='coerce')
+    vinfo['brand_id_clean'] = vinfo['brand_id'].fillna('').astype(str).str.strip()
 
     vinfo['offer_price_clean'] = vinfo['offer_price_clean'].fillna(-1)
-    
+
     # 2. Build Mapper
-    valid_vinfo = vinfo.dropna(subset=['mvid_clean']).copy()
-    valid_vinfo['mvid_clean'] = valid_vinfo['mvid_clean'].astype(int)
+    valid_vinfo = vinfo.dropna(subset=['sku_id_clean']).copy()
+    valid_vinfo['sku_id_clean'] = valid_vinfo['sku_id_clean'].astype(int)
 
     # Clean variant_id as well so we can find the arithmetic minimum
-    valid_vinfo['variant_id_clean'] = pd.to_numeric(valid_vinfo['variant_id'].astype(str).str.replace(',', '', regex=False), errors='coerce')
+    valid_vinfo['variant_id_clean'] = pd.to_numeric(valid_vinfo['variant_id'], errors='coerce')
     valid_vinfo = valid_vinfo.dropna(subset=['variant_id_clean']).copy()
     valid_vinfo['variant_id_clean'] = valid_vinfo['variant_id_clean'].astype(int)
 
@@ -45,8 +45,8 @@ def main():
 
     valid_vinfo = valid_vinfo.merge(mapper_df, on=group_cols, how='left')
 
-    mvid_to_mapper = dict(zip(valid_vinfo['mvid_clean'].astype(str), valid_vinfo['mapper_variant_id'].astype(str)))
-    mvid_to_vid = dict(zip(valid_vinfo['mvid_clean'].astype(str), valid_vinfo['variant_id'].fillna('').astype(str)))
+    mvid_to_mapper = dict(zip(valid_vinfo['sku_id_clean'].astype(str), valid_vinfo['mapper_variant_id'].astype(str)))
+    mvid_to_vid = dict(zip(valid_vinfo['sku_id_clean'].astype(str), valid_vinfo['variant_id'].fillna('').astype(str)))
     
     # Since mapper_variant_id is now a variant_id, we need to map variant_id -> name
     vid_to_name = dict(zip(valid_vinfo['variant_id_clean'].astype(str), valid_vinfo['variant_name'].fillna('').astype(str)))

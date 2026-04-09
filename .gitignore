@@ -4,3 +4,4 @@ recon_run.log
 tmp/
 .venv/
 .env
+variant-info.csv

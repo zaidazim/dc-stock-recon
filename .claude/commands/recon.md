@@ -38,8 +38,16 @@ Example: `/recon 2025-04-01 2026-03-01` for full FY 2025-26.
    - Use the output filename from step 3.
    - Pass `--variant-info variant-info.csv` explicitly.
 
-5. **Report results:**
-   - Output files produced (recon output, mapped output, variant mapping reference)
-   - Row counts
-   - Any warnings (e.g. negative closing stock)
+5. **Run export:**
+   ```
+   .venv/bin/python src/export.py
+   ```
+   Produces two Excel files in root ready for sharing:
+   - `final-stock-recon-YYYY-MM-DD.xlsx` (tabs: FINAL, PR, kit prepared, calc. refill, ops, WH OS, VM OS, Sales, variant info)
+   - `stock-recon-mapper-variant-YYYY-MM-DD.xlsx` (tabs: stock-recon-on-mapper-variant, variant-mapper)
+
+6. **Report results:**
+   - Excel files produced
+   - Recon row count, mapper row count
+   - Any warnings (e.g. negative closing stock, unmapped SKUs)
    - Confirm input CSVs have been archived to `archive/<DATE>/`
